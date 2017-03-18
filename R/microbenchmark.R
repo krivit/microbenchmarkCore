@@ -63,6 +63,7 @@
 #' @param check Function to check if the expressions are equal. By default \code{NULL} which omits the check.
 #' @param control List of control arguments. See Details.
 #' @param unit Default unit used in \code{summary} and \code{print}.
+#' @param setuplist List of unevaluated expressions of the same length as the number of expressions to be benchmarked, to be evaluated before their corresponding expression but \emph{not} timed.
 #'
 #' @return Object of class \sQuote{microbenchmark}, a data frame with
 #' columns \code{expr} and \code{time}. \code{expr} contains the
@@ -82,7 +83,11 @@
 #'
 #' ## Print results:
 #' print(res)
-#'
+#' ## Example setuplist usage
+#' microbenchmark(log10times = {sapply(1:x, log)},
+#'                log20times = {sapply(1:x, log)},
+#'                setuplist = alist({x<-10}, {x<-20}))
+#' 
 #' ## Example check usage
 #' my_check <- function(values) {
 #'   all(sapply(values[-1], function(x) identical(values[[1]], x)))
@@ -105,8 +110,10 @@ microbenchmark <- function(..., list=NULL,
                            times=100L,
                            unit,
                            check=NULL,
-                           control=list()) {
+                           control=list(),
+                           setuplist=NULL) {
   stopifnot(times == as.integer(times))
+  stopifnot(is.null(setuplist) || is.list(setuplist))
   if (!missing(unit))
     stopifnot(is.character("unit"), length(unit) == 1L)
 
@@ -116,6 +123,11 @@ microbenchmark <- function(..., list=NULL,
   stopifnot(as.integer(control$warmup) == control$warmup)
 
   exprs <- c(as.list(match.call(expand.dots = FALSE)$`...`), list)
+  if(is.null(setuplist)){
+    setuplist <- rep(alist({}), length(exprs))
+  }
+  stopifnot(length(exprs) == length(setuplist))
+  
   nm <- names(exprs)
   exprnm <- sapply(exprs, function(e) paste(deparse(e), collapse=" "))
   if (is.null(nm))
@@ -126,7 +138,7 @@ microbenchmark <- function(..., list=NULL,
 
   if (!is.null(check)) {
     ## Evaluate values in parent environment
-    values <- lapply(exprs, eval, parent.frame())
+    values <- lapply(seq_along(exprs), function(i, frame){eval(setuplist[[i]], frame); eval(exprs[[i]], frame)}, frame=parent.frame())
     ok <- check(values)
 
     if (!isTRUE(ok)) {
@@ -146,8 +158,9 @@ microbenchmark <- function(..., list=NULL,
   else
     stop("Unknown ordering. Must be one of 'random', 'inorder' or 'block'.")
   exprs <- exprs[o]
+  setuplist <- setuplist[o]
 
-  res <- .Call(do_microtiming, exprs, parent.frame(), as.integer(control$warmup))
+  res <- .Call(do_microtiming, setuplist, exprs, parent.frame(), as.integer(control$warmup))
 
   ## Sanity check. Fail as early as possible if the results are
   ## rubbish.

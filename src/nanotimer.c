@@ -84,11 +84,11 @@ SEXP do_get_nanotime() {
     return ScalarReal(get_nanotime() * 1.0);
 }
 
-SEXP do_microtiming(SEXP s_exprs, SEXP s_rho, SEXP s_warmup) {
+SEXP do_microtiming(SEXP s_setups, SEXP s_exprs, SEXP s_rho, SEXP s_warmup) {
   nanotime_t start, end, overhead;
   int i, n_under_overhead = 0, n_start_end_equal = 0;
   R_len_t n_exprs = 0;
-  SEXP s_ret, s_expr;
+  SEXP s_ret, s_setup, s_expr;
   double *ret;
 
   UNPACK_INT(s_warmup, warmup);
@@ -109,7 +109,9 @@ SEXP do_microtiming(SEXP s_exprs, SEXP s_rho, SEXP s_warmup) {
 
   /* Actual timing... */
   for (i = 0; i < n_exprs; ++i) {
+    s_setup = VECTOR_ELT(s_setups, i);
     s_expr = VECTOR_ELT(s_exprs, i);
+    eval(s_setup, s_rho);
     start = get_nanotime();
     eval(s_expr, s_rho);
     end = get_nanotime();
